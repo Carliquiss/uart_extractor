@@ -106,12 +106,16 @@ def get_terminal(ser):
         command = input(">>")
         print(send_command(ser, command))
         
+        
 def check_if_terminal(ser):
+    """
+        Check if a terminal responds 
+    """
     
     response = send_command(ser, "echo hola")
     
     if "hola" in response:
-        print(Fore.GREEN + "\tGot terminal :)")
+        print(Fore.GREEN + "\n     Got terminal :)")
         return True
     
     else:
