@@ -32,23 +32,25 @@ def write_data(ser, command):
     ser.read(WaitBytes) #To Avoid read the input later and its print on screen
    
     
-def read_and_print(ser):
+def parse_output(output):
     """
         Read and (pretty)print all the data received from the serial port
     """
-    data = read_data(ser)    
+    data = output    
     lines = data.split("\r\n")
     
     output = ""
     
     for index, line in enumerate(lines):
-        output += line + "\n"
+        #output += line + "\n"
         
         if index == len(lines)-1:
-            print(line, end = "")
+            pass
+            #print(line, end = "")
             
-        else: 
-            print(line)
+        else:
+            output += line + "\n"
+            #print(line)
             
     return output
             
@@ -59,7 +61,6 @@ def send_command(ser, command):
     """
     write_data(ser, command)
     return read_data(ser)
-    #return(read_and_print(ser))
 
 
 
@@ -78,6 +79,7 @@ def find_baudrate():
     baudrates = [1200, 1800, 2400, 4800, 9600, 38400, 19200, 57600, 115200]
     final_baudrate = 0
     
+    valid_baudrates = 0
     for baud in baudrates:
         
         try:
@@ -87,24 +89,31 @@ def find_baudrate():
             
             final_baudrate = baud
             print(Fore.GREEN + "OK")
+            valid_baudrates += 1
             
         except Exception as e: 
             print(Fore.RED + "No valid")
-            pass
             
-    if final_baudrate != 0:
+    if final_baudrate != 0 and valid_baudrates == 1:
         print(Fore.GREEN + "\n\nFound baudrate: " + str(final_baudrate))
+    
+    else:
+        print(Fore.RED + "\n\nFound multiple valid baudrates, not possible")
+        final_baudrate = 0
  
  
     return final_baudrate
 
 
 def get_terminal(ser):
+    """
+        Gives the user access to the device terminal
+    """
     command = ""
     
     while command != "exit from terminal":
-        command = input(">>")
-        print(send_command(ser, command))
+        command = input(">> ")
+        print(send_command(ser, command), end = "")
         
         
 def check_if_terminal(ser):
@@ -132,6 +141,24 @@ def ducks():
          (___/  (___/  (___/..........
         """)
 
+
+
+def get_info(ser):
+    
+    system_info     = parse_output(send_command(ser, "uname -a"))
+    user_info       = parse_output(send_command(ser, "id"))
+    partitions_info = parse_output(send_command(ser, "cat /proc/mtd"))
+    binaries_info   = parse_output(send_command(ser, "ls /bin"))
+    busybox_info    = parse_output(send_command(ser, "busybox"))
+    
+        
+    print(Fore.YELLOW + "System: " + Fore.WHITE + system_info)
+    print(Fore.YELLOW + "User and Group: " + Fore.WHITE + user_info)
+    print(Fore.YELLOW + "Partitions: " + Fore.WHITE + partitions_info)
+    print(Fore.YELLOW + "Binaries: " + Fore.WHITE + binaries_info)
+    print(Fore.YELLOW + "Busybox: " + Fore.WHITE + busybox_info)
+        
+        
 def main():
     
     baudrate = find_baudrate()
@@ -140,11 +167,13 @@ def main():
         ser = serial.Serial ("/dev/ttyS0", baudrate)    
         
         print("\n[] - Please wait 10 seconds just to be sure the device is fully booted")
-        sleep(10)
+        sleep(15)
         
         print("[] - Checking if there is terminal access")
         
         if check_if_terminal(ser):
+            get_info(ser)
+            
             response = input("\nDo you want to open the terminal? (Y/N) ")
             
             if response.upper() == "Y":
