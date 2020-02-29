@@ -1,4 +1,5 @@
 import serial
+import re
 
 from time import sleep
 from colorama import init, Fore, Back, Style
@@ -34,25 +35,21 @@ def write_data(ser, command):
     
 def parse_output(output):
     """
-        Read and (pretty)print all the data received from the serial port
+        Parse output from read_data if there is ansi code
     """
-    data = output    
-    lines = data.split("\r\n")
+    ansi_escape = re.compile(r'(?:\x1B[@-_]|[\x80-\x9F])[0-?]*[ -/]*[@-~]')
+    result = ansi_escape.sub('', output).replace("\r", "")
     
-    output = ""
-    
-    for index, line in enumerate(lines):
-        #output += line + "\n"
-        
-        if index == len(lines)-1:
+    final_output = ""
+    for line in result.split("\n"):
+        if line == "" or line == "[root@OpenWrt]":
             pass
-            #print(line, end = "")
-            
         else:
-            output += line + "\n"
-            #print(line)
+            final_output += line + "\n"
             
-    return output
+    return final_output
+            
+    
             
 
 def send_command(ser, command):
@@ -60,7 +57,7 @@ def send_command(ser, command):
         Send any command and get the result
     """
     write_data(ser, command)
-    return read_data(ser)
+    return parse_output(read_data(ser))
 
 
 
@@ -145,34 +142,65 @@ def ducks():
 
 def get_info(ser):
     
-    system_info     = parse_output(send_command(ser, "uname -a"))
-    user_info       = parse_output(send_command(ser, "id"))
-    partitions_info = parse_output(send_command(ser, "cat /proc/mtd"))
-    binaries_info   = parse_output(send_command(ser, "ls /bin"))
-    busybox_info    = parse_output(send_command(ser, "busybox"))
+    system_info     = send_command(ser, "uname -a")
+    user_info       = send_command(ser, "id")
+    partitions_info = send_command(ser, "cat /proc/mtd")
+    binaries_info   = send_command(ser, "ls /bin")
+    busybox_info    = send_command(ser, "busybox")
     
         
     print(Fore.YELLOW + "System: " + Fore.WHITE + system_info)
     print(Fore.YELLOW + "User and Group: " + Fore.WHITE + user_info)
     print(Fore.YELLOW + "Partitions: " + Fore.WHITE + partitions_info)
-    print(Fore.YELLOW + "Binaries: " + Fore.WHITE + binaries_info)
+    #print(Fore.YELLOW + "Binaries: " + Fore.WHITE + binaries_info)
     print(Fore.YELLOW + "Busybox: " + Fore.WHITE + busybox_info)
         
+
+
+def mod_lighttpd(ser):
+    
+    result = send_command(ser, "ls /etc/lighttpd/lighttpd2.conf")
+    
+    if "/etc/lighttpd/lighttpd2.conf" in result.split("\n"):
+        print(Fore.GREEN + "Found lighttpd service")
         
+        line_to_mod = send_command(ser, "cat /etc/lighttpd/lighttpd2.conf | grep server.upload-dirs").split("\n")[0]
+        send_command(ser, "cp /etc/lighttpd/lighttpd2.conf /etc/lighttpd/lighttpd2.conf.old")
+        send_command(ser, """sed 's#{}#server.upload-dirs          = ( "/tmp" )#' /etc/lighttpd/lighttpd2.conf > /etc/lighttpd/modded_lighttd2.conf""".format(line_to_mod))
+        send_command(ser, "cp /etc/lighttpd/modded_lighttd2.conf /etc/lighttpd/lighttpd2.conf")
+        
+        line_to_check = send_command(ser, "cat /etc/lighttpd/lighttpd2.conf | grep server.upload-dirs").split("\n")[0]
+    
+        if line_to_check == """server.upload-dirs          = ( "/tmp" )""":
+            print(Fore.CYAN + "Lighttp modded to mount /tmp")
+        
+        else:
+            print(Fore.RED + "Some errores during the process of trying to mount /tmp")
+            
+    
+    else:
+        print(Fore.RED + "No lighttpd service found")
+    
+
+
 def main():
+    
     
     baudrate = find_baudrate()
     
-    if baudrate != 0: 
+    if baudrate != 0:
+        
         ser = serial.Serial ("/dev/ttyS0", baudrate)    
         
-        print("\n[] - Please wait 10 seconds just to be sure the device is fully booted")
+        print("\n[] - Please wait 15 seconds just to be sure the device is fully booted")
         sleep(15)
         
         print("[] - Checking if there is terminal access")
         
         if check_if_terminal(ser):
+            
             get_info(ser)
+            mod_lighttpd(ser)
             
             response = input("\nDo you want to open the terminal? (Y/N) ")
             
