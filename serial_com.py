@@ -91,11 +91,15 @@ def find_baudrate():
         except Exception as e: 
             print(Fore.RED + "No valid")
             
-    if final_baudrate != 0 and valid_baudrates == 1:
-        print(Fore.GREEN + "\n\nFound baudrate: " + str(final_baudrate))
-    
+    if final_baudrate != 0:
+        
+        if valid_baudrates != 1: 
+            print("\n\n" + Back.RED + "Found multiple valid baudrates, possible error but It will try with the last baudrate found")
+        
+        print(Fore.GREEN + "\n\nBaudrate to work with: " + str(final_baudrate))
+        
     else:
-        print(Fore.RED + "\n\nFound multiple valid baudrates, not possible")
+        
         final_baudrate = 0
  
  
