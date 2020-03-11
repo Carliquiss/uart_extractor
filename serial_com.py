@@ -35,7 +35,7 @@ def write_data(ser, command):
     
 def parse_output(output):
     """
-        Parse output from read_data if there is ansi code
+        Parse output from read_data to delete ansi code
     """
     ansi_escape = re.compile(r'(?:\x1B[@-_]|[\x80-\x9F])[0-?]*[ -/]*[@-~]')
     result = ansi_escape.sub('', output).replace("\r", "")
@@ -63,7 +63,7 @@ def send_command(ser, command):
 
 def find_baudrate():
     """
-        To autofind the correct baudrate of the device
+        For autofinding the correct baudrate of the device (reads the terminal ports until there are valid ascii code on it)
     """
     
     print(Fore.CYAN + "+------------------------+")
@@ -94,7 +94,7 @@ def find_baudrate():
     if final_baudrate != 0:
         
         if valid_baudrates != 1: 
-            print("\n\n" + Back.RED + "Found multiple valid baudrates, possible error but It will try with the last baudrate found")
+            print("\n\n" + Back.RED + "Found multiple valid baudrates, possible error but It will try with the last baudrate found (usually it is the correct one)")
         
         print(Fore.GREEN + "\n\nBaudrate to work with: " + str(final_baudrate))
         
@@ -143,25 +143,69 @@ def ducks():
         """)
 
 
+def find_user(ser):
+    user_info       = send_command(ser, "id")
+    
+    if "found" in user_info.split():
+        user_info = send_command(ser, "echo $USER")
+
+    
+    return user_info.split("\n")[0]
+
 
 def get_info(ser):
-    
-    system_info     = send_command(ser, "uname -a")
-    user_info       = send_command(ser, "id")
+    """
+        Execute differents commands to get info about the device
+    """
+    system_info     = send_command(ser, "uname -a").split("\n")[0]
+    user_info       = find_user(ser)
     partitions_info = send_command(ser, "cat /proc/mtd")
-    binaries_info   = send_command(ser, "ls /bin")
-    busybox_info    = send_command(ser, "busybox")
-    
+    busybox_info    = send_command(ser, "busybox")    
         
     print(Fore.YELLOW + "System: " + Fore.WHITE + system_info)
-    print(Fore.YELLOW + "User and Group: " + Fore.WHITE + user_info)
+    print(Fore.YELLOW + "User info: " + Fore.WHITE + user_info)
     print(Fore.YELLOW + "Partitions: " + Fore.WHITE + partitions_info)
-    #print(Fore.YELLOW + "Binaries: " + Fore.WHITE + binaries_info)
     print(Fore.YELLOW + "Busybox: " + Fore.WHITE + busybox_info)
+     
+
+    ssh_info = send_command(ser, "ls /usr/bin/")
+    
+    if "ssh" in ssh_info.split():
+        print(Fore.GREEN + "SSH FOUND")
+    else:
+        print(Fore.RED + "NO SSH FOUND")
         
+    
+    extract_partitions(ser)
+    
+
+
+def extract_partitions(ser):
+    
+    partitions_info = send_command(ser, "cat /proc/mtd").split("\n")    
+    
+    for partition in partitions_info: 
+        partition = partition.split()
+        
+        if len(partition) == 4:
+            
+            dev = partition[0].replace(":","")
+            name = partition[3].replace('"',"")
+            
+            if name == "rootfs":
+                partition_block = "mtdblock" + dev[-1]
+                send_command(ser, "dd if=/dev/" + partition_block + " of=/tmp/" + name + ".bin bs=4096")
+            
+                
+    
+    
+    
 
 
 def mod_lighttpd(ser):
+    """
+        If lighttpd is installed in the system, this method change the settings to mount /tmp folder in order to read/write easily on the device
+    """
     
     result = send_command(ser, "ls /etc/lighttpd/lighttpd2.conf")
     
@@ -196,8 +240,8 @@ def main():
         
         ser = serial.Serial ("/dev/ttyS0", baudrate)    
         
-        print("\n[] - Please wait 15 seconds just to be sure the device is fully booted")
-        sleep(15)
+        print("\n[] - Please wait 30 seconds just to be sure the device is fully booted")
+        sleep(30)
         
         print("[] - Checking if there is terminal access")
         
