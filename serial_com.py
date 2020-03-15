@@ -1,5 +1,7 @@
 import serial
 import re
+import sys
+import os
 
 from time import sleep
 from colorama import init, Fore, Back, Style
@@ -42,7 +44,7 @@ def parse_output(output):
     
     final_output = ""
     for line in result.split("\n"):
-        if line == "" or line == "[root@OpenWrt]":
+        if line == "" or line == "[root@OpenWrt]" or line == "/ # ":
             pass
         else:
             final_output += line + "\n"
@@ -89,7 +91,8 @@ def find_baudrate():
             valid_baudrates += 1
             
         except Exception as e: 
-            print(Fore.RED + "No valid")
+            print(Fore.RED + "Not valid")
+            
             
     if final_baudrate != 0:
         
@@ -125,16 +128,17 @@ def check_if_terminal(ser):
     response = send_command(ser, "echo hola")
     
     if "hola" in response:
-        print(Fore.GREEN + "\n     Got terminal :)")
+        print(Fore.GREEN + " ------> Got terminal ✓\n")
         return True
     
     else:
-        print(Fore.RED + "\nNo terminal :(")
+        print(Fore.RED + " ------> No terminal X")
         return False
 
 
 
 def ducks():
+    print(Fore.CYAN + "\n\nBye bye...")
     print(Fore.CYAN +
         """
           _      _      _
@@ -144,7 +148,7 @@ def ducks():
 
 
 def find_user(ser):
-    user_info       = send_command(ser, "id")
+    user_info = send_command(ser, "id")
     
     if "found" in user_info.split():
         user_info = send_command(ser, "echo $USER")
@@ -153,41 +157,89 @@ def find_user(ser):
     return user_info.split("\n")[0]
 
 
+
+def print_info(info):
+    
+    for item in info:
+        try: 
+            print(Fore.YELLOW + item + ": " + Fore.WHITE + info[item])
+            
+        except:
+            pass
+
+
+
+def check_services(ser):
+    """
+        Check if differents services as ssh exist on the device
+    """
+    print(Back.CYAN + "\n")
+    print(Fore.CYAN + "+------------------------+")
+    print(Fore.CYAN + "|    CHECKING SERVICES   |")
+    print(Fore.CYAN + "+------------------------+")
+    
+    services_info = {}
+    usr_bin = send_command(ser, "ls /usr/bin/")
+    
+    if "ssh" in usr_bin.split():
+        
+        print(Fore.GREEN + "-----> SSH FOUND ✓")
+        services_info["ssh"] = True
+    
+    else:
+        print(Fore.RED + "-----> NO SSH FOUND X")
+        services_info["ssh"] = False
+
+
+    if "scp" in usr_bin.split():
+        
+        print(Fore.GREEN + "-----> SCP FOUND ✓")
+        services_info["scp"] = True
+    
+    else:
+        print(Fore.RED + "-----> NO SCP FOUND X")
+        services_info["scp"] = False
+        
+        
+    
+    lighttpd_info = send_command(ser, "ls /etc/lighttpd/lighttpd2.conf")
+    
+    if "/etc/lighttpd/lighttpd2.conf" in lighttpd_info.split("\n"):
+        
+        print(Fore.GREEN + "-----> LIGHTTPD FOUND ✓")
+        services_info["lighttpd"] = True
+    
+    else:
+        print(Fore.RED + "-----> NO LIGHTTPD FOUND X")
+        services_info["lighttpd"] = False
+        
+    
+    return services_info
+        
+
+
 def get_info(ser):
     """
-        Execute differents commands to get info about the device
+        Execute differents commands to get general info about the device
     """
-    system_info     = send_command(ser, "uname -a").split("\n")[0]
-    user_info       = find_user(ser)
-    partitions_info = send_command(ser, "cat /proc/mtd")
-    busybox_info    = send_command(ser, "busybox")    
-        
-    print(Fore.YELLOW + "System: " + Fore.WHITE + system_info)
-    print(Fore.YELLOW + "User info: " + Fore.WHITE + user_info)
-    print(Fore.YELLOW + "Partitions: " + Fore.WHITE + partitions_info)
-    print(Fore.YELLOW + "Busybox: " + Fore.WHITE + busybox_info)
-     
-
-    ssh_info = send_command(ser, "ls /usr/bin/")
-    scp_info = send_command(ser, "ls /usr/bin/")
     
-    if "ssh" in ssh_info.split():
-        print(Fore.GREEN + "SSH FOUND")
-    else:
-        print(Fore.RED + "NO SSH FOUND")
-        
-        
-    if "scp" in ssh_info.split():
-        print(Fore.GREEN + "SCP FOUND")
-    else:
-        print(Fore.RED + "NO SCP FOUND")
-        
+    print(Back.CYAN + "\n") 
+    print(Fore.CYAN + "+------------------------+")
+    print(Fore.CYAN + "|  CHECKING DEVICE INFO  |")
+    print(Fore.CYAN + "+------------------------+")
     
-    extract_partitions(ser)
+    device_info = {}
+    
+    device_info["system"]     = send_command(ser, "uname -a").split("\n")[0]
+    device_info["user"]       = find_user(ser)
+    device_info["partitions"] = send_command(ser, "cat /proc/mtd")
+    device_info["busybox"]    = send_command(ser, "busybox")    
+    
+    return device_info
     
 
 
-def extract_partitions(ser):
+def extract_rootfs(ser):
     
     partitions_info = send_command(ser, "cat /proc/mtd").split("\n")    
     
@@ -203,10 +255,6 @@ def extract_partitions(ser):
                 partition_block = "mtdblock" + dev[-1]
                 send_command(ser, "dd if=/dev/" + partition_block + " of=/tmp/" + name + ".bin bs=4096")
             
-                
-    
-    
-    
 
 
 def mod_lighttpd(ser):
@@ -214,61 +262,131 @@ def mod_lighttpd(ser):
         If lighttpd is installed in the system, this method change the settings to mount /tmp folder in order to read/write easily on the device
     """
     
-    result = send_command(ser, "ls /etc/lighttpd/lighttpd2.conf")
-    
-    if "/etc/lighttpd/lighttpd2.conf" in result.split("\n"):
-        print(Fore.GREEN + "Found lighttpd service")
+    line_to_mod = send_command(ser, "cat /etc/lighttpd/lighttpd2.conf | grep server.upload-dirs").split("\n")[0]
+    send_command(ser, "cp /etc/lighttpd/lighttpd2.conf /etc/lighttpd/lighttpd2.conf.old")
+    send_command(ser, """sed 's#{}#server.upload-dirs          = ( "/tmp" )#' /etc/lighttpd/lighttpd2.conf > /etc/lighttpd/modded_lighttd2.conf""".format(line_to_mod))
+    send_command(ser, "cp /etc/lighttpd/modded_lighttd2.conf /etc/lighttpd/lighttpd2.conf")
         
-        line_to_mod = send_command(ser, "cat /etc/lighttpd/lighttpd2.conf | grep server.upload-dirs").split("\n")[0]
-        send_command(ser, "cp /etc/lighttpd/lighttpd2.conf /etc/lighttpd/lighttpd2.conf.old")
-        send_command(ser, """sed 's#{}#server.upload-dirs          = ( "/tmp" )#' /etc/lighttpd/lighttpd2.conf > /etc/lighttpd/modded_lighttd2.conf""".format(line_to_mod))
-        send_command(ser, "cp /etc/lighttpd/modded_lighttd2.conf /etc/lighttpd/lighttpd2.conf")
-        
-        line_to_check = send_command(ser, "cat /etc/lighttpd/lighttpd2.conf | grep server.upload-dirs").split("\n")[0]
+    line_to_check = send_command(ser, "cat /etc/lighttpd/lighttpd2.conf | grep server.upload-dirs").split("\n")[0]
     
-        if line_to_check == """server.upload-dirs          = ( "/tmp" )""":
-            print(Fore.CYAN + "Lighttp modded to mount /tmp")
+    if line_to_check == """server.upload-dirs          = ( "/tmp" )""":
+        print(Fore.CYAN + "Lighttp modded to mount /tmp")
         
-        else:
-            print(Fore.RED + "Some errores during the process of trying to mount /tmp")
-            
-    
     else:
-        print(Fore.RED + "No lighttpd service found")
+        print(Fore.RED + "Some errors during the process of trying to mount /tmp")
+            
+
+
+def check_networking(ser):
+    os.system("ifconfig eth0")
+
+
+def scp_to_raspi(ser):
     
+    send_command(ser, "scp /tmp/rootfs.bin pi@{}:/home/pi/")
+    
+    
+
+def test_mode():
+    
+    try: 
+        baudrate = sys.argv[2]
+        print(Fore.GREEN + "Baudrate: " + baudrate)
+        
+        ser = serial.Serial ("/dev/ttyS0", baudrate)
+        
+        if check_if_terminal(ser):
+                        
+            servicios = check_services(ser)
+            
+            print_info(get_info(ser))
+            print_info(servicios)
+            
+            extract_rootfs(ser)
+            
+            if servicios["scp"]:
+                print("Copying rootfs partition to the Raspberry Pi")  
+        
+            get_terminal(ser)
+            ducks()
+    
+    except Exception as error:
+        print(Fore.RED + "Bad argument")
+        print(error)
+
+
+
+def direct_terminal_mode():
+    
+    try: 
+        baudrate = 57600
+        print(Fore.GREEN + "Baudrate: " + baudrate)
+        
+        ser = serial.Serial ("/dev/ttyS0", baudrate)
+        
+        print_info(get_info(ser))
+        print_info(check_services(ser))
+        
+        get_terminal(ser)
+        ducks()
+    
+    except Exception as error:
+        print(Fore.RED + "Bad argument")
+        print(error)
+    
+    
+
+
+def auto_mode():
+
+    baudrate = find_baudrate()
+    
+    ser = serial.Serial ("/dev/ttyS0", baudrate)
+        
+    if baudrate != 0:         
+            
+            
+        print("\n● Please wait 30 seconds just to be sure the device is fully booted")
+        sleep(30)
+            
+        print("● Checking if there is terminal access:", end = "")
+            
+        if check_if_terminal(ser):
+                        
+            servicios = check_services(ser)
+            
+            print_info(get_info(ser))
+            print_info(servicios)
+            
+            extract_rootfs(ser)
+            
+            if servicios["scp"]:
+                print("Copying rootfs partition to the Raspberry Pi")  
+                
+            response = input("\nDo you want to open the terminal? (Y/N) ")
+                
+            if response.upper() == "Y":
+                get_terminal(ser)                
+                
+            ducks()
+        
+    else:
+        print(Fore.RED + "No valid baudrate found, quitting the program..." )
+
 
 
 def main():
     
-    
-    baudrate = find_baudrate()
-    
-    if baudrate != 0:
+    if len(sys.argv) >= 2:
         
-        ser = serial.Serial ("/dev/ttyS0", baudrate)    
+        if sys.argv[1] == "-t" or sys.argv[1] == "--terminal":
+            direct_terminal_mode()
         
-        print("\n[] - Please wait 30 seconds just to be sure the device is fully booted")
-        sleep(30)
+        if sys.arv[1] == "-d" or sys.argv[1] == "--debug":
+            test_mode()
         
-        print("[] - Checking if there is terminal access")
-        
-        if check_if_terminal(ser):
-            
-            get_info(ser)
-            mod_lighttpd(ser)
-            
-            response = input("\nDo you want to open the terminal? (Y/N) ")
-            
-            if response.upper() == "Y":
-                get_terminal(ser)
-                
-            
-            print(Fore.CYAN + "\n\nBye bye...")
-            ducks()
-            
-    
-    else:
-        print(Fore.RED + "No valid baudrate found, quitting the program..." )
+    else: 
+        auto_mode()
 
 
 
