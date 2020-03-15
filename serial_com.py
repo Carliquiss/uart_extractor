@@ -1,7 +1,7 @@
 import serial
 import re
 import sys
-import os
+import netifaces as ni
 
 from time import sleep
 from colorama import init, Fore, Back, Style
@@ -277,21 +277,45 @@ def mod_lighttpd(ser):
             
 
 
+
 def check_networking(ser):
-    os.system("ifconfig eth0")
+    
+    raspberry_ip = ni.ifaddresses('eth0')[ni.AF_INET][0]['addr']
+    device_ip = send_command(ser, 'ifconfig | grep "inet"').split()[1].replace("addr:", "")    
+    
+    print(Back.CYAN + "\n")
+    print("\n● Checking connectivity...")
+    print("+--------------------------------+")
+    print("+  " + Fore.YELLOW + "Raspberry IP: " + Fore.WHITE + raspberry_ip + "  +")
+    print("+  " + Fore.YELLOW + "Device    IP: " + Fore.WHITE + device_ip + "  +")
+    print("+--------------------------------+")
+    
+    if raspberry_ip.rsplit(".")[0] == device_ip.rsplit(".")[0]:
+        return True, raspberry_ip
+    
+    else:
+        return False, raspberry_ip
 
 
 def scp_to_raspi(ser):
     
-    send_command(ser, "scp /tmp/rootfs.bin pi@{}:/home/pi/")
+    if_same_network, raspberry_ip = check_networking(ser)
     
+    if if_same_network:
+        respuesta = send_command(ser, "scp /tmp/rootfs.bin pi@{}:/home/pi/".format(raspberry_ip))
+        send_command(ser, "y")
+        send_command(ser, "raspberry")
+        print(respuesta)
+    
+    else:
+        print(Fore.RED + "The device and the Raspberry Pi are not in the same network, please connect the Rasperry to the router")
     
 
 def test_mode():
     
     try: 
-        baudrate = sys.argv[2]
-        print(Fore.GREEN + "Baudrate: " + baudrate)
+        baudrate = 57600
+        print(Fore.GREEN + "Baudrate: " + str(baudrate))
         
         ser = serial.Serial ("/dev/ttyS0", baudrate)
         
@@ -302,10 +326,10 @@ def test_mode():
             print_info(get_info(ser))
             print_info(servicios)
             
-            extract_rootfs(ser)
+            #extract_rootfs(ser) 
             
             if servicios["scp"]:
-                print("Copying rootfs partition to the Raspberry Pi")  
+                scp_to_raspi(ser)
         
             get_terminal(ser)
             ducks()
@@ -319,7 +343,7 @@ def test_mode():
 def direct_terminal_mode():
     
     try: 
-        baudrate = 57600
+        baudrate = sys.argv[2]
         print(Fore.GREEN + "Baudrate: " + baudrate)
         
         ser = serial.Serial ("/dev/ttyS0", baudrate)
@@ -382,7 +406,7 @@ def main():
         if sys.argv[1] == "-t" or sys.argv[1] == "--terminal":
             direct_terminal_mode()
         
-        if sys.arv[1] == "-d" or sys.argv[1] == "--debug":
+        if sys.argv[1] == "-d" or sys.argv[1] == "--debug":
             test_mode()
         
     else: 
