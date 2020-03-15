@@ -169,11 +169,18 @@ def get_info(ser):
      
 
     ssh_info = send_command(ser, "ls /usr/bin/")
+    scp_info = send_command(ser, "ls /usr/bin/")
     
     if "ssh" in ssh_info.split():
         print(Fore.GREEN + "SSH FOUND")
     else:
         print(Fore.RED + "NO SSH FOUND")
+        
+        
+    if "scp" in ssh_info.split():
+        print(Fore.GREEN + "SCP FOUND")
+    else:
+        print(Fore.RED + "NO SCP FOUND")
         
     
     extract_partitions(ser)
