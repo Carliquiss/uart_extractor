@@ -1,12 +1,17 @@
-import serial
 import re
 import sys
+import serial
+import requests
 import netifaces as ni
 
 from time import sleep
+from shutil import copyfile
 from colorama import init, Fore, Back, Style
 
 init(autoreset=True) #Colorama autoreset
+
+
+RASPBERRYPI_PASSWORD = "top_secret_password"
 
 
 def read_data(ser): 
@@ -124,7 +129,8 @@ def check_if_terminal(ser):
     """
         Check if a terminal responds 
     """
-    
+    print(Fore.YELLOW + "\n● Baudrate: " + Fore.WHITE + str(ser.baudrate))
+    print("● Checking if there is terminal access:", end = "")
     response = send_command(ser, "echo hola")
     
     if "hola" in response:
@@ -173,7 +179,7 @@ def check_services(ser):
     """
         Check if differents services as ssh exist on the device
     """
-    print(Back.CYAN + "\n")
+    print()
     print(Fore.CYAN + "+------------------------+")
     print(Fore.CYAN + "|    CHECKING SERVICES   |")
     print(Fore.CYAN + "+------------------------+")
@@ -200,6 +206,18 @@ def check_services(ser):
         print(Fore.RED + "-----> NO SCP FOUND X")
         services_info["scp"] = False
         
+
+    netcat_info = send_command(ser, "nc")
+    
+    if "usage:" in netcat_info.split():
+        
+        print(Fore.GREEN + "-----> NETCAT FOUND ✓")
+        services_info["netcat"] = True
+    
+    else:
+        print(Fore.RED + "-----> NO NETCAT FOUND X")
+        services_info["netcat"] = False
+        
         
     
     lighttpd_info = send_command(ser, "ls /etc/lighttpd/lighttpd2.conf")
@@ -223,7 +241,7 @@ def get_info(ser):
         Execute differents commands to get general info about the device
     """
     
-    print(Back.CYAN + "\n") 
+    print() 
     print(Fore.CYAN + "+------------------------+")
     print(Fore.CYAN + "|  CHECKING DEVICE INFO  |")
     print(Fore.CYAN + "+------------------------+")
@@ -241,19 +259,30 @@ def get_info(ser):
 
 def extract_rootfs(ser):
     
-    partitions_info = send_command(ser, "cat /proc/mtd").split("\n")    
+    print("\n●Extracting rootfs partition to /tmp/rootfs.bin.... ", end = "")
     
-    for partition in partitions_info: 
-        partition = partition.split()
+    try:    
+        if "/tmp/rootfs.bin" in send_command(ser, "ls /tmp/rootfs.bin").split("\n"):
+            print(Fore.GREEN + "Already extracted ✓\n")
         
-        if len(partition) == 4:
+        else:
+            partitions_info = send_command(ser, "cat /proc/mtd").split("\n")    
             
-            dev = partition[0].replace(":","")
-            name = partition[3].replace('"',"")
-            
-            if name == "rootfs":
-                partition_block = "mtdblock" + dev[-1]
-                send_command(ser, "dd if=/dev/" + partition_block + " of=/tmp/" + name + ".bin bs=4096")
+            for partition in partitions_info: 
+                partition = partition.split()
+                
+                if len(partition) == 4:
+                    
+                    dev = partition[0].replace(":","")
+                    name = partition[3].replace('"',"")
+                    
+                    if name == "rootfs":
+                        partition_block = "mtdblock" + dev[-1]
+                        send_command(ser, "dd if=/dev/" + partition_block + " of=/tmp/" + name + ".bin bs=4096")
+                        print(Fore.GREEN + "Extraction completed ✓\n")
+    
+    except Exception as error:
+        print(Fore.RED + " ------> Error during process X:\n" + error)
             
 
 
@@ -276,6 +305,18 @@ def mod_lighttpd(ser):
         print(Fore.RED + "Some errors during the process of trying to mount /tmp")
             
 
+def push_netcat(ser):
+    
+    network_status, rpi_ip = check_networking(ser)
+    try:
+        copyfile("./binaries/netcat_mipsel", "/var/www/html/netcat_mipsel")
+        
+        if check_web_server() and network_status:
+            send_command(ser, "wget -O /tmp/netcat_el http://{}/netcat_mipsel".format(rpi_ip))
+    
+    except Exception as error:
+        print(Fore.RED + "Error pushing netcat file")
+        print(error)
 
 
 def check_networking(ser):
@@ -283,8 +324,8 @@ def check_networking(ser):
     raspberry_ip = ni.ifaddresses('eth0')[ni.AF_INET][0]['addr']
     device_ip = send_command(ser, 'ifconfig | grep "inet"').split()[1].replace("addr:", "")    
     
-    print(Back.CYAN + "\n")
-    print("\n● Checking connectivity...")
+    print()
+    print("\n● Checking connectivity:")
     print("+--------------------------------+")
     print("+  " + Fore.YELLOW + "Raspberry IP: " + Fore.WHITE + raspberry_ip + "  +")
     print("+  " + Fore.YELLOW + "Device    IP: " + Fore.WHITE + device_ip + "  +")
@@ -302,34 +343,65 @@ def scp_to_raspi(ser):
     if_same_network, raspberry_ip = check_networking(ser)
     
     if if_same_network:
-        respuesta = send_command(ser, "scp /tmp/rootfs.bin pi@{}:/home/pi/".format(raspberry_ip))
+        print(Fore.GREEN + " ------> Raspberry and Device on the same network ✓\n")
+        print("\n● Copying rootfs.bin to raspberry /home/pi/rootfs.bin, it can take a while (up to 3-4 min). Please wait...")
+        
+        send_command(ser, "scp /tmp/rootfs.bin pi@{}:/home/pi/rootfs.bin".format(raspberry_ip))
         send_command(ser, "y")
-        send_command(ser, "raspberry")
-        print(respuesta)
+        send_command(ser, RASPBERRYPI_PASSWORD + "\n")
+
     
     else:
-        print(Fore.RED + "The device and the Raspberry Pi are not in the same network, please connect the Rasperry to the router")
+        print(Fore.RED + "▬ The device and the Raspberry Pi are not in the same network, please connect the Rasperry to the router")
     
+
+
+def check_web_server():
+    
+    print() 
+    print(Fore.CYAN + "+------------------------+")
+    print(Fore.CYAN + "|  CHECKING WEB SERVER   |")
+    print(Fore.CYAN + "+------------------------+")
+    
+    try: 
+        request = requests.get("http://localhost")
+        
+        if "Apache" in request.headers['server']:
+            print(Fore.GREEN + "-----> Apache working ✓")
+            return True
+            
+        else:
+            print(Fore.RED + "-----> Apache not working X")
+    
+    except:
+        print(Fore.RED + "-----> Apache not working X")
+    
+    return False
+
 
 def test_mode():
     
-    try: 
-        baudrate = 57600
-        print(Fore.GREEN + "Baudrate: " + str(baudrate))
-        
+    check_web_server()
+    
+    try:
+        baudrate = 57600    
         ser = serial.Serial ("/dev/ttyS0", baudrate)
         
         if check_if_terminal(ser):
-                        
+            
             servicios = check_services(ser)
             
             print_info(get_info(ser))
             print_info(servicios)
             
-            #extract_rootfs(ser) 
+            extract_rootfs(ser) 
             
             if servicios["scp"]:
-                scp_to_raspi(ser)
+                #scp_to_raspi(ser)
+                pass
+            
+            if not servicios["netcat"]:
+                push_netcat(ser)
         
             get_terminal(ser)
             ducks()
@@ -347,19 +419,17 @@ def direct_terminal_mode():
         print(Fore.GREEN + "Baudrate: " + baudrate)
         
         ser = serial.Serial ("/dev/ttyS0", baudrate)
-        
-        print_info(get_info(ser))
-        print_info(check_services(ser))
-        
-        get_terminal(ser)
-        ducks()
+            
+        if check_if_terminal(ser):
+            
+            get_terminal(ser)
+            ducks()
     
     except Exception as error:
-        print(Fore.RED + "Bad argument")
+        print(Fore.RED + "Some error: ", end = "")
         print(error)
     
     
-
 
 def auto_mode():
 
@@ -373,8 +443,6 @@ def auto_mode():
         print("\n● Please wait 30 seconds just to be sure the device is fully booted")
         sleep(30)
             
-        print("● Checking if there is terminal access:", end = "")
-            
         if check_if_terminal(ser):
                         
             servicios = check_services(ser)
@@ -385,7 +453,8 @@ def auto_mode():
             extract_rootfs(ser)
             
             if servicios["scp"]:
-                print("Copying rootfs partition to the Raspberry Pi")  
+                #scp_to_raspi(ser)
+                pass
                 
             response = input("\nDo you want to open the terminal? (Y/N) ")
                 
