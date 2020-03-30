@@ -144,7 +144,7 @@ def check_if_terminal(ser):
 
 
 def title():
-    print(Fore.MAGENTA + """                                                                       
+    print(Fore.LIGHTCYAN_EX + """                                                                       
 8888888b.        888     888       d8888 8888888b. 88888888888 
 888   Y88b       888     888      d88888 888   Y88b    888     
 888    888       888     888     d88P888 888    888    888     
@@ -155,7 +155,7 @@ def title():
 888   T88b        "Y88888P" d88P     888 888   T88b    888     
     """)
     
-    print(Fore.MAGENTA + "\t\t//////// Router UART Hacking by Carliquiss ////////\n\n")
+    print(Fore.LIGHTCYAN_EX + "\t\t//////// Router UART Hacking by Carliquiss ////////\n\n")
 
 
 def ducks():
