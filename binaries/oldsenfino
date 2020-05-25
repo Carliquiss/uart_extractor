@@ -1,0 +1,1 @@
+wget -O- 'http://192.168.31.108:5000/updateGet?name=router_asus&status=on'
