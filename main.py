@@ -86,7 +86,7 @@ def find_baudrate():
     print(Fore.CYAN + "|    AUTOFIND BAUDRATE   |")
     print(Fore.CYAN + "+------------------------+")
 
-    test_serial = serial.Serial("/dev/ttyS0")
+    test_serial = serial.Serial(DEV_SERIAL_PORT)
 
     baudrates = [1200, 1800, 2400, 4800, 9600, 38400, 19200, 57600, 115200]
 
@@ -408,7 +408,7 @@ def config_crontab(ser):
     
 def auto_mode():
     """
-        Usage: python3 main.py -d
+        Usage: python3 main.py -a
 
         Waits to receive data from the serial port and tries to find the baudrate of the device.
         First, it extracts rootfs patition and hack the device. Then, give you the option to open a terminal.
@@ -416,7 +416,7 @@ def auto_mode():
 
     baudrate = find_baudrate()
 
-    ser = serial.Serial("/dev/ttyS0", baudrate)
+    ser = serial.Serial(DEV_SERIAL_PORT, baudrate)
 
     if baudrate != 0:
 
@@ -426,9 +426,14 @@ def auto_mode():
         if check_if_terminal(ser):
 
             get_info(ser)
-            copy_busybox(ser)
+            print(Back.CYAN + "\n")
             get_reverse_shell(ser)
-
+            print(Back.CYAN + "\n")
+            config_crontab(ser)
+            print(Back.CYAN + "\n")
+            extract_rootfs(ser)
+            
+            
             response = input("\nDo you want to open the terminal? (Y/N) ")
 
             if response.upper() == "Y":
@@ -441,10 +446,18 @@ def auto_mode():
         print(Fore.RED + "No valid baudrate found, quitting the program...")
 
 
-def test_mode():
+
+def direct_mode():
+    """
+        Usage: python3 main.py -d [baudrate]
+
+        Like automode but specifing the baudrate value
+    """
+
     try:
-        baudrate = 57600
-        ser = serial.Serial("/dev/ttyS0", baudrate)
+
+        baudrate = sys.argv[2]
+        ser = serial.Serial(DEV_SERIAL_PORT, baudrate)
 
         if check_if_terminal(ser):
             
@@ -467,11 +480,16 @@ def test_mode():
 
     except Exception as error:
 
-        print(Fore.RED + "Something went wrong")
-        print(error)
+        if str(error) == "list index out of range":
+            print(Fore.RED + "No baudrate value provided \n\n")
+            print_usage()
+        
+        else:    
+            print(Fore.RED + "No baudrate valid value ({} type instead of integer) \n\n".format(type(baudrate)))
+            #print(Fore.YELLOW + str(error))
 
 
-def direct_terminal_mode():
+def terminal_mode():
     """
         Usage: python3 main.py -t [baudrate]
 
@@ -481,7 +499,7 @@ def direct_terminal_mode():
     try:
 
         baudrate = sys.argv[2]
-        ser = serial.Serial("/dev/ttyS0", baudrate)
+        ser = serial.Serial(DEV_SERIAL_PORT, baudrate)
 
         if check_if_terminal(ser):
             get_terminal(ser)
@@ -492,10 +510,11 @@ def direct_terminal_mode():
         
         if str(error) == "list index out of range":
             print(Fore.RED + "No baudrate value provided \n\n")
+            print_usage()
         
         else:    
             print(Fore.RED + "No baudrate valid value ({} type instead of integer) \n\n".format(type(baudrate)))
-            print(Fore.YELLOW + str(error))
+            #print(Fore.YELLOW + str(error))
 
 
 
@@ -505,8 +524,9 @@ def print_usage():
     
     print(Fore.RED + "\n\nPlease see usage below: \n")
     print("Usage: ")
-    print("\tTerminal  mode:  " + Fore.CYAN + "'python3 main.py -t 57600'" + "  (or whatever baudrate value)")
-    print("\tAutomatic mode:  " + Fore.CYAN + "'python3 main.py -a'")
+    print("\tAutomatic mode:  " + Fore.CYAN + "'sudo python3 main.py -a (--auto)'")
+    print("\tTerminal  mode:  " + Fore.CYAN + "'sudo python3 main.py -t (--terminal) 57600'" + "  (or whatever baudrate the router uses)")
+    print("\tDirect    mode:  " + Fore.CYAN + "'sudo python3 main.py -d (--direct) 57600'" + "  (or whatever baudrate the router uses)")    
     print("\n")
 
 
@@ -516,12 +536,12 @@ def main():
 
     try:
         if sys.argv[1] == "-t" or sys.argv[1] == "--terminal":
-            direct_terminal_mode()
+            terminal_mode()
 
-        elif sys.argv[1] == "-d" or sys.argv[1] == "--debug":
-            test_mode()
+        elif sys.argv[1] == "-d" or sys.argv[1] == "--direct":
+            direct_mode()
                 
-        elif sys.argv[1] == "-a" or sys.argv[1] == "--automode":
+        elif sys.argv[1] == "-a" or sys.argv[1] == "--auto":
             auto_mode()
         
     except:
