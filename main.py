@@ -421,7 +421,7 @@ def auto_mode():
     if baudrate != 0:
 
         print("\n● Please wait 40 seconds just to be sure the device is fully booted")
-        sleep(0)
+        sleep(40)
 
         if check_if_terminal(ser):
 
