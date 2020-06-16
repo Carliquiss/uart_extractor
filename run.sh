@@ -8,6 +8,6 @@ sudo python3 main.py -a
 
 #If you want to run it on other modes:
 
-#To use direct mode: 		sudo python3 main.py -d 57600 (router naudrate)
+#To use direct mode: 		sudo python3 main.py -d 57600 (router baudrate)
 #To get just a terminal: 	sudo python3 main.py -t 57600 (router baudrate)
 
