@@ -3,7 +3,9 @@ _A tool to connect a Raspberry Pi to a router through UART obtaining a shell_
 
 ## ⚙️ How does it works 
 
-The Raspberry Pi has an UART interface on the GPIO (on Raspbian it can be accessed on /dev/ttyS0 by default) which can be used to connect to a Router with another UART interface (usually obtaining a shell if it's not protected). This tool allows to detect automatically the baudrate of the router in order to get a shell on the device. It also tries to upload a full version of BusyBox (with netcat included) to establish a reverse shell in the IP and Port specified, gets some useful information (like the user, the partitions that exists on the device and the BusyBox version that the router has). Finally, it tries to extract the rootfs partition so it can be analyzed without having to be connected to the router and send some information to a Backend (in this [**repo**](https://github.com/Carliquiss/controlboard) you can find the Backend configuration and all the info) to store it on a DB. 
+The Raspberry Pi has an UART interface on the GPIO (on Raspbian it can be accessed on /dev/ttyS0 by default) which can be used to connect to a Router with another UART interface (usually obtaining a shell if it's not protected).  
+
+This tool allows to detect automatically the baudrate of the router in order to get a shell on the device. It also tries to upload a full version of BusyBox (with netcat included) to establish a reverse shell in the IP and Port specified, gets some useful information (like the user, the partitions that exists on the device and the BusyBox version that the router has). Finally, it tries to extract the rootfs partition so it can be analyzed without having to be connected to the router and send some information to a Backend (in this [**repo**](https://github.com/Carliquiss/controlboard) you can find the Backend configuration and all the info) to store it on a DB. 
 
 ## 🔧 Installing 
 First clone the repo: 
