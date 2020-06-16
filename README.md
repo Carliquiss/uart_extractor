@@ -20,7 +20,7 @@ pip3 install -r requirements.txt
 ## ⌨️ Modes 
 There are three modes: 
 
- * **Automatic**: To automatically detect the baudrate of the router and extract all the information explained in the "How does it works" section, inluding uploading the BusyBox binary to the router and extracting the rootfs partition. 
+ * **Automatic**: To automatically detect the baudrate of the router and extract all the information explained in the "How does it works" section, including uploading the BusyBox binary to the router and extracting the rootfs partition. 
  * **Direct**: Similar to automatic mode, but user has to specify the baudrate. 
  * **Terminal**: If the user only wants to get a terminal on the router knowing the baudrate. 
  
